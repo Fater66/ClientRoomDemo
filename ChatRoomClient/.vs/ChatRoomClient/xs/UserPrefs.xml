@@ -1,0 +1,37 @@
+﻿<Properties StartupConfiguration="{9D1611AD-4AB7-D26E-967E-7973C4643F3C}|">
+  <MonoDevelop.Ide.Workbench ActiveDocument="Assets/ClientScripts/ClientHandler.cs">
+    <Files>
+      <File FileName="Assets/ClientScripts/ClientHandler.cs" Line="28" Column="24" />
+      <File FileName="Assets/ClientScripts/UserMsg.cs" />
+      <File FileName="Assets/ClientScripts/MsgConverter.cs" />
+      <File FileName="../../../../../../Applications/2019.4.16f1c1/Unity.app/Contents/Resources/PackageManager/BuiltInPackages/com.unity.ugui/Runtime/EventSystem/UIBehaviour.cs" />
+    </Files>
+    <Pads>
+      <Pad Id="ProjectPad">
+        <State name="__root__">
+          <Node name="ChatRoomClient" expanded="True">
+            <Node name="Assets" expanded="True">
+              <Node name="ClientScripts" expanded="True">
+                <Node name="ClientHandler.cs" selected="True" />
+              </Node>
+              <Node name="ServerScripts" expanded="True">
+                <Node name="server.dSYM" expanded="True">
+                  <Node name="Contents" expanded="True">
+                    <Node name="Resources" expanded="True" />
+                  </Node>
+                </Node>
+              </Node>
+            </Node>
+          </Node>
+        </State>
+      </Pad>
+    </Pads>
+  </MonoDevelop.Ide.Workbench>
+  <MonoDevelop.Ide.DebuggingService.PinnedWatches />
+  <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug" />
+  <MonoDevelop.Ide.ItemProperties.Assembly-CSharp PreferredExecutionTarget="b7dad916-62e0-4806-b435-c9b0a323dfad" />
+  <MonoDevelop.Ide.DebuggingService.Breakpoints>
+    <BreakpointStore />
+  </MonoDevelop.Ide.DebuggingService.Breakpoints>
+  <MultiItemStartupConfigurations />
+</Properties>

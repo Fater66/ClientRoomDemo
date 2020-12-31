@@ -1,0 +1,16 @@
+{
+    "files.associations": {
+        "cstdlib": "cpp",
+        "functional": "cpp",
+        "type_traits": "cpp",
+        "algorithm": "cpp",
+        "*.tcc": "cpp",
+        "fstream": "cpp",
+        "memory": "cpp",
+        "new": "cpp",
+        "numeric": "cpp",
+        "iostream": "cpp",
+        "typeinfo": "cpp",
+        "ostream": "cpp"
+    }
+}
