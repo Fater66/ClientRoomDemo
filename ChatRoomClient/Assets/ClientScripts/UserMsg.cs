@@ -21,24 +21,26 @@ using UnityEngine;
 [StructLayout(LayoutKind.Sequential, Pack = 1)] // 按1字节对齐
 public class Packet
 {
-    public bool isSetUserId;
+    //public bool isChangeRoom;
+    //public bool isSetUserId;
     public int userId;
     public int id;
+    // 0: 消息 1:设置userid 2:退出房间 3.开房间 4.锁房间 4.进入房间 
+    public int mode;
     public int len;
-    public bool isChangeRoom;
+
     public int roomId;
     [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 16)]
     public string name;
     [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 100)] //限制100字节
     public string content;
 
-    public Packet(int userId,int id,bool isChangeRoom,bool isSetUserId, int roomId, string user, string content) // 初始化
+    public Packet(int userId,int id,int mode, int roomId, string user, string content) // 初始化
     {
         this.userId = userId;
         this.id = id;
         this.len = content.Length;
-        this.isChangeRoom = isChangeRoom;
-        this.isSetUserId = isSetUserId;
+        this.mode = mode;
         this.roomId = roomId;
         this.name = user.PadRight(16, '\0');
         this.content = content.PadRight(100, '\0');

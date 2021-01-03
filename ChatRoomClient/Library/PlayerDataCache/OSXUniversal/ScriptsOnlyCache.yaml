@@ -525,4 +525,4 @@ ScriptsOnlyBuild:
   platform: 2
   scenePathNames:
   - Assets/Scenes/SampleScene.unity
-  playerPath: /Users/fater/project/ByteDance/Demo/ChatRoomClient/ClientApp.app
+  playerPath: /Users/fater/project/ByteDance/Demo/ChatRoomDemo/ChatRoomClient/ClientApp.app

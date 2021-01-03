@@ -35,19 +35,20 @@ static void sleep_ms(unsigned int secs)
 
 int main()
 {
-	int shmid = shmget((key_t)1234, sizeof(int), 0666 | IPC_CREAT);
+	int shmid = shmget((key_t)1234, sizeof(int[100]), 0666 | IPC_CREAT);
 	if (shmid == -1)
 	{
 		cout << "共享内存创建失败" << endl;
 		exit(0);
 	}
-	int *userId = (int *)shmat(shmid, (void *)0, 0);
+	int* rooms = (int *)shmat(shmid, (void *)0, 0);
+
 	pid_t pid;
 	pid = fork();
 	if(pid == 0)
 	{
 		
-		cout << "子进程" << *userId <<endl;
+		cout << "子进程" << *room << endl;
 	}
 	else
 	{

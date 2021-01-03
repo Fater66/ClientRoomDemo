@@ -16,14 +16,26 @@ using namespace std;
 
 struct Packet
 {
-	bool isSetUserId;
+	// bool isChangeRoom;
+	// bool isSetUserId;
+	
 	int userId;
 	int id;
+	// 0: 消息 1:设置userid 2:退出房间 3.开房间 4.锁房间 4.进入房间
+	int mode;
 	int len;
-	bool isChangeRoom;
+
 	int roomId;
 	char name[16]; 
 	char content[BUFMAX];
+};
+
+// 房间控制块 RoomControlBlock
+struct RoomCB
+{
+	int roomOwner[100];
+	bool isOpen[100];
+	int UserCount[100];
 };
 
 static void sleep_ms(unsigned int secs)
@@ -47,7 +59,7 @@ void PrintPacket(bool isSend, Packet* pack)
 	cout << "||userId:" << pack->userId;
 	cout << "||id:" << pack->id;
 	cout << "||len:" << pack->len;
-	cout << "||isChangeRoom:" << pack -> isChangeRoom;
+	cout << "||mode:" << pack -> mode;
 	cout << "||roomId:" << pack->roomId;
 	cout << "||name:" << pack->name;
 	cout << "||content:" << pack->content;
@@ -200,6 +212,23 @@ int main()
 	if (pack == (void *)-1)
 		cout << "pack shmat失败" << endl;
 
+	int shm_RoomCBid;
+	void *shm_RoomCB;
+	struct RoomCB *roomCB;
+	shm_RoomCBid = shmget((key_t)4321, sizeof(struct RoomCB), 0666 | IPC_CREAT);
+	if (shm_RoomCBid == -1)
+	{
+		cout << "RoomCB共享内存创建失败" << endl;
+		exit(0);
+	}
+	shm_RoomCB = shmat(shm_RoomCBid, (void *)0, 0);
+	memset(shm_RoomCB, 0, sizeof(RoomCB));
+	if (shm_RoomCB != (void *)-1)
+		cout << "RoomCB共享内存格式化成功" << endl;
+	roomCB = (struct RoomCB *)shmat(shm_RoomCBid, (void *)0, 0);
+	if (roomCB == (void *)-1)
+		cout << "roomCB shmat失败" << endl;
+
 	char objname[16] = {0};
 	int num, nlen;
 	pid_t pid;
@@ -216,7 +245,7 @@ int main()
 	if (listen(listenfd, 10) == -1)
 		cout << "listen 错误" << endl;
 
-	int UID = 0;
+	int UID = 1;
 	while (1)
 	{
 		if ((connectfd = accept(listenfd, NULL, NULL)) == -1)
@@ -228,9 +257,6 @@ int main()
 		if(pid == 0)
 		{
 			close(listenfd);
-			
-
-			
 			pid = fork();
 			// 第二次fork，创建读写进程
 			if (pid > 0)
@@ -261,15 +287,19 @@ int main()
 			if (pid == 0) //子进程，负责发送数据
 			{
 				signal(SIGUSR1, func);
-				int id_tmp = 0;
-				int roomId_tmp = -1;
+				int id_tmp = -1;
+				int roomId_cur = -1;
 
 				pack = (struct Packet *)shmat(shmid, (void *)0, 0);
 				if (pack == (void *)-1)
 					cout << "shmat失败" << endl;
 
+				roomCB = (struct RoomCB *)shmat(shm_RoomCBid, (void *)0, 0);
+				if (roomCB == (void *)-1)
+					cout << "roomCB shmat失败" << endl;
+				
 				// 发送UID设置报文
-				pack -> isSetUserId = true;
+				pack -> mode = 1;
 				pack -> userId = UID;
 				int zz = write(connectfd,pack,sizeof(Packet));
 				if (zz <= 0)
@@ -280,42 +310,100 @@ int main()
 					while (1)
 					{
 						sleep_ms(200); // 200ms
-						// PrintPacket(false,pack);
-						//判断是否是当前socket的报文
-						if (pack->id != id_tmp && pack -> roomId == roomId_tmp && !pack -> isChangeRoom)
+						// 根据id判断是否是已发送报文
+						if(pack->id == id_tmp)
+							continue;
+						// 消息报文 
+						// 1.判断是否是当前房间的报文
+						if (pack -> mode == 0 && pack -> roomId == roomId_cur  && roomId_cur != -1)
 						{
-							PrintPacket(false,pack);
 							// 收到当前报文，break进入转发流程
 							cout << "收到消息报文" << endl;
 							break;
 						}
-						else if(pack -> isChangeRoom && pack -> roomId != roomId_tmp && pack -> userId == UID)
+						// 退出房间报文 
+						// 1.判断是否是当前socket的用户发出
+						else if(pack -> mode == 2 && pack -> userId == UID)
 						{
 							PrintPacket(false,pack);
 							break;
 						}
+						else if(pack -> mode == 3  && pack -> userId == UID)
+						{
+							PrintPacket(false,pack);
+							break;
+						}
+						else if(pack -> mode == 4 && pack -> roomId != roomId_cur && pack -> userId == UID)
+						{
+							PrintPacket(false,pack);
+							break;
+						}
+						
 					}
 					id_tmp = pack -> id;
-					if(pack -> isChangeRoom)
+					
+					if(pack -> mode == 0)
 					{
-						roomId_tmp = pack -> roomId;
-						cout << "更改后的roomId_tmp" << roomId_tmp << endl;
-						cout << "UID" << UID << endl;
-						string temp(pack -> name);
-						strcpy(pack -> content,temp + "换房间");
-						int zz = write(connectfd,pack,sizeof(Packet));
-						if (zz <= 0)
-							cout << "************write 失败 ***" << endl;
-					}
-					else
-					{
-						// cout << "UID" << UID << endl;
-						// int zz = write(connectfd, pack, nlen + 20);
-						int zz = write(connectfd,pack,sizeof(Packet));
-						if (zz <= 0)
-							cout << "************write 失败 ***" << endl;
-					}
 
+					}
+					// 2:退出房间
+					else if(pack -> mode == 2)
+					{
+						// 首先判断当前房间是否是房主，如果是 关闭房间
+						if(roomCB -> roomOwner[roomId_cur] == pack -> userId)
+						{
+							roomCB -> roomOwner[roomId_cur] = 0;
+							roomCB -> isOpen[roomId_cur] = false;
+							roomCB -> UserCount[roomId_cur] = 0;
+							
+						}
+						else
+						{
+							roomCB -> UserCount [roomId_cur] --;
+						}
+						roomId_cur = -1;
+						pack -> mode = 5;
+						strcpy(pack -> content,"退出房间");
+					}
+					else if(pack -> mode == 3)
+					{
+						// 判断是否有人开了房间
+						if(roomCB -> roomOwner[pack -> roomId] == 0)
+						{
+							roomCB -> roomOwner[pack -> roomId] = pack -> userId;
+							roomCB -> isOpen[pack -> roomId] = true;
+							roomId_cur = pack -> roomId;
+							strcpy(pack -> content,"房间创建成功");
+						}
+						else
+						{
+							strcpy(pack -> content,"房间已被占用");
+						}
+					}
+					else if(pack -> mode == 4)
+					{
+						if(roomCB -> roomOwner[pack -> roomId] == 0)
+						{
+							strcpy(pack -> content,"房间不存在");
+						}
+						else
+						{
+							if(roomCB -> isOpen[pack -> roomId])
+							{
+								roomId_cur = pack -> roomId;
+								// cout << "更改后的roomId_tmp" << roomId_cur << endl;
+								// cout << "UID" << UID << endl;
+								strcpy(pack -> content,"进入房间");
+							}
+							else
+							{
+								strcpy(pack -> content,"房间已锁");
+							}
+						}
+					}
+					int zz = write(connectfd,pack,sizeof(Packet));
+					if (zz <= 0)
+						cout << "************write 失败 ***" << endl;
 				}
 			}
 		}

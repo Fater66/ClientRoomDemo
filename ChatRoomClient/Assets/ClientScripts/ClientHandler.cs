@@ -44,30 +44,41 @@ public class ClientHandler : MonoBehaviour
 
     public void CloseConnect()
     {
-
+        
     }
 
 
-    public void ChangeRoom()
+    public void QuitRoom()
+    {
+        SendPacket(2, -1, nameInput.text, "");
+    }
+
+    public void EnterRoom()
     {
         int changeRoomId = int.Parse(roomInput.text);
         curRoomId = changeRoomId;
-        SendPacket(true, changeRoomId, nameInput.text, "");
+        SendPacket(4, changeRoomId, nameInput.text, "");
+    }
+    public void SetUpRoom()
+    {
+        int changeRoomId = int.Parse(roomInput.text);
+        curRoomId = changeRoomId;
+        SendPacket(3, changeRoomId, nameInput.text, "");
     }
 
     public void SendMsgPacket()
     {
-        SendPacket(false, curRoomId, nameInput.text, contentInput.text);
+        SendPacket(0, curRoomId, nameInput.text, contentInput.text);
 
     }
-    public void SendPacket(bool isChangeRoom,int roomId,string packName,string packContent)
+    public void SendPacket(int mode,int roomId,string packName,string packContent)
     {
         // 发送名字
 
-        Packet pack = new Packet(curUserId,curId,isChangeRoom,false,roomId,packName, packContent);
+        Packet pack = new Packet(curUserId,curId,mode,roomId,packName, packContent);
         curId++;
 
-        Debug.Log("发送消息:" + ",更换房间?" + isChangeRoom + ",房间号:" + curRoomId + ",昵称：" + packName + ",内容:"+pack.content);
+        Debug.Log("发送消息:" + ",房间号:" + curRoomId + ",昵称：" + packName + ",内容:"+pack.content);
         byte[] message = MsgConverter.StructToBytes(pack);
 
         Debug.Log("message len:" + message.Length);
@@ -78,19 +89,23 @@ public class ClientHandler : MonoBehaviour
     {
         if(ns != null)
         {
-            Packet pack = new Packet(curUserId, -1,false,false,curRoomId,"", "");
+            Packet pack = new Packet(curUserId, -1,0,curRoomId,"", "");
             while (true)
             {
                 byte[] readBuf = new byte[Marshal.SizeOf(pack)];
                 ns.Read(readBuf, 0, readBuf.Length);
                 pack = (Packet)MsgConverter.BytesToStruct(readBuf, pack.GetType());
                 //Debug.Log("收到" + System.Text.Encoding.ASCII.GetString(readBuf));
-                Debug.Log("收到消息," + ",房间号:" + curRoomId + ",昵称：" + pack.name + ",内容:" + pack.content + "isSetUser" + pack.isSetUserId);
+                Debug.Log("收到消息," + ",房间号:" + curRoomId + ",昵称：" + pack.name + ",内容:" + pack.content + ",mode:" + pack.mode);
                 contentToShow = pack.name + ":" + pack.content + "\n";
-                if(pack.isSetUserId)
+                if(pack.mode == 1)
                 {
                     curUserId = pack.userId;
                     Debug.Log("收到服务器UID" + curUserId);
+                }
+                if(pack.mode == 5)
+                {
+                    curRoomId = -1;
                 }
             }
         }
@@ -127,7 +142,6 @@ public class ClientHandler : MonoBehaviour
             contentToShow = "";
         }
         //curUserId = int.Parse(userIdInput.text);
-        debugText.text = "curRoomId:" + curRoomId + "\nuserId:" + curUserId;
     }
 
     private void OnApplicationQuit()
