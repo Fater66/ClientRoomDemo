@@ -103,7 +103,7 @@ public class ClientHandler : MonoBehaviour
                     curUserId = pack.userId;
                     Debug.Log("收到服务器UID" + curUserId);
                 }
-                if(pack.mode == 5)
+                if (pack.mode == 5)
                 {
                     curRoomId = -1;
                 }
@@ -142,12 +142,14 @@ public class ClientHandler : MonoBehaviour
             contentToShow = "";
         }
         //curUserId = int.Parse(userIdInput.text);
+        debugText.text = "curRoomId:" + curRoomId + "\nuserId:" + curUserId;
     }
 
     private void OnApplicationQuit()
     {
         ns.Close();
     }
+
 }
 
 

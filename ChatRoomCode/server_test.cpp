@@ -9,6 +9,8 @@
 #include <signal.h>
 #include <sys/shm.h>
 #include <unistd.h>
+#include <pthread.h>
+
 #define BUFMAX 100
 #define FILENAME "share.txt"
 
@@ -16,9 +18,6 @@ using namespace std;
 
 struct Packet
 {
-	// bool isChangeRoom;
-	// bool isSetUserId;
-	
 	int userId;
 	int id;
 	// 0: 消息 1:设置userid 2:退出房间 3.开房间 4.锁房间 4.进入房间
@@ -38,12 +37,39 @@ struct RoomCB
 	int UserCount[100];
 };
 
+struct HeartInfo
+{
+	pid_t pid;
+	int timer;
+};
+
 static void sleep_ms(unsigned int secs)
 {
     struct timeval tval;
     tval.tv_sec=secs/1000;
     tval.tv_usec=(secs*1000)%1000000;
     select(0,NULL,NULL,NULL,&tval);
+}
+
+void* heart_handler(void* arg)
+{
+    cout << "心跳检测线程启动" << endl;
+	HeartInfo* heartInfo = (struct HeartInfo*) arg;
+    while(1)
+    {
+        if(heartInfo -> timer >= 0 && heartInfo -> timer < 3)
+		{
+			(heartInfo -> timer)++;
+			cout << "当前心跳次数" << heartInfo -> timer << endl;
+		}
+		else
+		{
+			kill(heartInfo -> pid, SIGUSR1); // 用户自定义信号 默认处理:进程终止
+			cout << "心跳检测超时，当前timer:" << heartInfo -> timer << endl;
+			exit(0);
+		}
+        sleep(3);   // 定时三秒
+    }
 }
 
 void PrintPacket(bool isSend, Packet* pack)
@@ -68,6 +94,7 @@ void PrintPacket(bool isSend, Packet* pack)
 void func(int flag)
 {
 	cout << "write进程退出" << endl;
+	cout << "read进程退出" << endl;
 	exit(0);
 }
 
@@ -261,8 +288,17 @@ int main()
 			// 第二次fork，创建读写进程
 			if (pid > 0)
 			{
-				pack=(struct Packet *)shmat(shmid,  (void*)0, 0);
+				pthread_t heartId;     // 创建心跳检测线程
+				struct HeartInfo heartInfo;
+				heartInfo.pid = pid;
+				heartInfo.timer = 0;
+				int ret = pthread_create(&heartId, NULL, heart_handler, &heartInfo);
+				if(ret != 0)
+				{
+					cout << "无法创建心跳检测线程" << endl;
+				}
 				
+				pack=(struct Packet *)shmat(shmid,  (void*)0, 0);
 				if(pack==(void *)-1)
 					cout<<"shmat失败"<<endl;
 				while (1)
@@ -271,14 +307,7 @@ int main()
 					// 注意此处要用Packet大小，sizeof(pack)是指针大小=8字节
 					num = readn(connectfd, pack, sizeof(Packet));
 					// 判断是否还有数据
-					test(pid,num);
-					if (!strcmp(pack->name, "test"))
-					{
-						cout << "num:" << num << endl;
-						cout << "pack content:" << pack->content << endl;
-						cout << "pack len:" << pack->len << endl;
-						cout << "pack name:" << pack->name << endl;
-					}
+					// test(pid,num);
 
 					if (num <= 0)
 						return 0;
