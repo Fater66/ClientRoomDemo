@@ -25,7 +25,7 @@ public class Packet
     //public bool isSetUserId;
     public int userId;
     public int id;
-    // 0: 消息 1:设置userid 2:退出房间 3.开房间 4.锁房间 4.进入房间 
+    // 0: 消息 1:设置userid 2:退出房间 3.开房间  4.进入房间 5.确认退出房间 6.锁房间 7.心跳报文 8.确认心跳
     public int mode;
     public int len;
 

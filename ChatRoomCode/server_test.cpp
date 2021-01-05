@@ -20,7 +20,7 @@ struct Packet
 {
 	int userId;
 	int id;
-	// 0: 消息 1:设置userid 2:退出房间 3.开房间 4.锁房间 4.进入房间
+	// 0: 消息 1:设置userid 2:退出房间 3.开房间  4.进入房间 5.确认退出房间 6.锁房间 7.心跳报文 8.确认心跳
 	int mode;
 	int len;
 
@@ -41,6 +41,15 @@ struct HeartInfo
 {
 	pid_t pid;
 	int timer;
+	int connectfd;
+};
+
+// 打开句柄上限3个 所以合在一起 同时方便操作
+struct SharedMem
+{
+	struct Packet packet;
+	struct RoomCB roomCB;
+	struct HeartInfo heartInfo;
 };
 
 static void sleep_ms(unsigned int secs)
@@ -64,6 +73,7 @@ void* heart_handler(void* arg)
 		}
 		else
 		{
+			close(heartInfo -> connectfd);
 			kill(heartInfo -> pid, SIGUSR1); // 用户自定义信号 默认处理:进程终止
 			cout << "心跳检测超时，当前timer:" << heartInfo -> timer << endl;
 			exit(0);
@@ -126,7 +136,7 @@ ssize_t readn(int fd, void *content, size_t count)
 	{
 		if ((nread = read(fd, bufp, nleft)) <= 0)
 		{
-			cout << "连接中断" << endl;
+			// cout << "连接中断" << endl;
 			return 0;
 		}
 		nleft -= nread;
@@ -134,83 +144,6 @@ ssize_t readn(int fd, void *content, size_t count)
 		bufp += nread;
 	}
 	return count;
-}
-
-ssize_t writen(int fd, void *content, size_t count)
-{
-	ssize_t nleft = count;
-	ssize_t nwrite;
-	char *bufp = (char *)content;
-
-	while (nleft > 0)
-	{
-		nwrite = write(fd, bufp, nleft);
-		nleft -= nwrite;
-		bufp += nwrite;
-	}
-	return count;
-}
-
-void root_usr(int connectfd) // root 用户
-{
-	int ret, len;
-	Packet pack;
-	memset(pack.name, 0, 16);
-	while (1)
-	{
-		strcpy(pack.content,
-			   "**********欢迎 Root 管理员**********\n\n1 . 查看聊天记录\n 2 . 删除聊天记录\n 乱按 -》 退出  \n");
-		len = strlen(pack.content) + 1;
-		pack.len = htonl(len);
-		writen(connectfd, &pack, len + 20);
-		ret = read(connectfd, &pack, 4);
-		if (ret <= 0)
-			return;
-		len = ntohl(pack.len);
-		ret = read(connectfd, &pack.name, len + 16);
-		if (ret <= 0)
-			return;
-		if (strlen(pack.content) != 1)
-		{
-			cout << pack.content << " ***" << strlen(pack.content) << endl;
-			return;
-		}
-
-		switch (pack.content[0])
-		{
-		case '1':
-		{
-			FILE *fp = fopen(FILENAME, "rb");
-			fseek(fp, 0, SEEK_END);
-			int size = ftell(fp);
-			fseek(fp, 0, SEEK_SET);
-			char *data = new char[size];
-			int ret = fread(data, size, 1, fp);
-			if (ret != 1)
-				cout << "size  不等于  ret" << endl;
-
-			strcpy(pack.content, "*********消息纪录******\n\n");
-			len = strlen(pack.content) + 1;
-			pack.len = htonl(len);
-			writen(connectfd, &pack, len + 20);
-			writen(connectfd, data, size);
-			strcpy(pack.content, "***********完***********\n");
-			len = strlen(pack.content) + 1;
-			pack.len = htonl(len);
-			writen(connectfd, &pack, len + 20);
-			delete[] data;
-		}
-		break;
-
-		case '2':
-		{
-			FILE *fp = fopen(FILENAME, "w");
-			fclose(fp);
-		}
-		default:
-			return;
-		}
-	}
 }
 
 int main()
@@ -224,37 +157,72 @@ int main()
 
 	int shmid;
 	void *shm;
-	struct Packet *pack;
-	shmid = shmget((key_t)1234, sizeof(struct Packet), 0666 | IPC_CREAT);
+	struct SharedMem *sharedMem;
+	shmid = shmget((key_t)1234, sizeof(struct SharedMem), 0666 | IPC_CREAT);
 	if (shmid == -1)
 	{
-		cout << "pack共享内存创建失败" << endl;
+		cout << "shm共享内存创建失败" << endl;
 		exit(0);
 	}
 	shm = shmat(shmid, (void *)0, 0);
-	memset(shm, 0, sizeof(Packet));
+	memset(shm, 0, sizeof(SharedMem));
 	if (shm != (void *)-1)
-		cout << "pack共享内存格式化成功" << endl;
-	pack = (struct Packet *)shmat(shmid, (void *)0, 0);
-	if (pack == (void *)-1)
-		cout << "pack shmat失败" << endl;
-
-	int shm_RoomCBid;
-	void *shm_RoomCB;
+		cout << "shm共享内存格式化成功" << endl;
+	sharedMem = (struct SharedMem *)shmat(shmid, (void *)0, 0);
+	if (sharedMem == (void *)-1)
+		cout << "shm shmat失败" << endl;
+	struct Packet *pack;
 	struct RoomCB *roomCB;
-	shm_RoomCBid = shmget((key_t)4321, sizeof(struct RoomCB), 0666 | IPC_CREAT);
-	if (shm_RoomCBid == -1)
-	{
-		cout << "RoomCB共享内存创建失败" << endl;
-		exit(0);
-	}
-	shm_RoomCB = shmat(shm_RoomCBid, (void *)0, 0);
-	memset(shm_RoomCB, 0, sizeof(RoomCB));
-	if (shm_RoomCB != (void *)-1)
-		cout << "RoomCB共享内存格式化成功" << endl;
-	roomCB = (struct RoomCB *)shmat(shm_RoomCBid, (void *)0, 0);
-	if (roomCB == (void *)-1)
-		cout << "roomCB shmat失败" << endl;
+	// int shmid;
+	// void *shm;
+	// struct Packet *pack;
+	// shmid = shmget((key_t)1234, sizeof(struct Packet), 0666 | IPC_CREAT);
+	// if (shmid == -1)
+	// {
+	// 	cout << "pack共享内存创建失败" << endl;
+	// 	exit(0);
+	// }
+	// shm = shmat(shmid, (void *)0, 0);
+	// memset(shm, 0, sizeof(Packet));
+	// if (shm != (void *)-1)
+	// 	cout << "pack共享内存格式化成功" << endl;
+	// pack = (struct Packet *)shmat(shmid, (void *)0, 0);
+	// if (pack == (void *)-1)
+	// 	cout << "pack shmat失败" << endl;
+
+	// int shm_RoomCBid;
+	// void *shm_RoomCB;
+	// struct RoomCB *roomCB;
+	// shm_RoomCBid = shmget((key_t)4321, sizeof(struct RoomCB), 0666 | IPC_CREAT);
+	// if (shm_RoomCBid == -1)
+	// {
+	// 	cout << "RoomCB共享内存创建失败" << endl;
+	// 	exit(0);
+	// }
+	// shm_RoomCB = shmat(shm_RoomCBid, (void *)0, 0);
+	// memset(shm_RoomCB, 0, sizeof(RoomCB));
+	// if (shm_RoomCB != (void *)-1)
+	// 	cout << "RoomCB共享内存格式化成功" << endl;
+	// roomCB = (struct RoomCB *)shmat(shm_RoomCBid, (void *)0, 0);
+	// if (roomCB == (void *)-1)
+	// 	cout << "roomCB shmat失败" << endl;
+
+	// int shm_HeartInfoid;
+	// void *shm_HeartInfo;
+	// struct HeartInfo *heartInfo;
+	// shm_HeartInfoid = shmget((key_t)1111, sizeof(struct HeartInfo), 0666 | IPC_CREAT);
+	// if (shm_HeartInfoid == -1)
+	// {
+	// 	cout << "HeartInfo共享内存创建失败" << endl;
+	// 	exit(0);
+	// }
+	// shm_HeartInfo = shmat(shm_HeartInfoid, (void *)0, 0);
+	// memset(shm_HeartInfo, 0, sizeof(HeartInfo));
+	// if (shm_HeartInfo != (void *)-1)
+	// 	cout << "HeartInfo共享内存格式化成功" << endl;
+	// heartInfo = (struct HeartInfo *)shmat(shm_HeartInfoid, (void *)0, 0);
+	// if (heartInfo == (void *)-1)
+	// 	cout << "heartInfo shmat失败" << endl;
 
 	char objname[16] = {0};
 	int num, nlen;
@@ -288,19 +256,23 @@ int main()
 			// 第二次fork，创建读写进程
 			if (pid > 0)
 			{
+				sharedMem = (struct SharedMem *)shmat(shmid, (void *)0, 0);
+				if (sharedMem == (void *)-1)
+					cout << "shm shmat失败" << endl;
+				struct Packet *pack= &sharedMem -> packet;
+
+				struct HeartInfo *heartInfo = &sharedMem -> heartInfo;
+				heartInfo -> pid = pid;
+				heartInfo -> timer = 0;
+				heartInfo -> connectfd = connectfd;
 				pthread_t heartId;     // 创建心跳检测线程
-				struct HeartInfo heartInfo;
-				heartInfo.pid = pid;
-				heartInfo.timer = 0;
-				int ret = pthread_create(&heartId, NULL, heart_handler, &heartInfo);
+				int ret = pthread_create(&heartId, NULL, heart_handler, heartInfo);
 				if(ret != 0)
 				{
 					cout << "无法创建心跳检测线程" << endl;
 				}
 				
-				pack=(struct Packet *)shmat(shmid,  (void*)0, 0);
-				if(pack==(void *)-1)
-					cout<<"shmat失败"<<endl;
+
 				while (1)
 				{
 					// 读取pack len
@@ -308,9 +280,8 @@ int main()
 					num = readn(connectfd, pack, sizeof(Packet));
 					// 判断是否还有数据
 					// test(pid,num);
-
-					if (num <= 0)
-						return 0;
+					// if (num <= 0)
+					// 	return 0;
 				}
 			}
 			if (pid == 0) //子进程，负责发送数据
@@ -319,16 +290,29 @@ int main()
 				int id_tmp = -1;
 				int roomId_cur = -1;
 
-				pack = (struct Packet *)shmat(shmid, (void *)0, 0);
-				if (pack == (void *)-1)
-					cout << "shmat失败" << endl;
+				sharedMem = (struct SharedMem *)shmat(shmid, (void *)0, 0);
+				if (sharedMem == (void *)-1)
+					cout << "shm shmat失败" << endl;
+				struct Packet *pack= &sharedMem -> packet;
+				struct RoomCB *roomCB = &sharedMem -> roomCB;
+				struct HeartInfo *heartInfo = &sharedMem -> heartInfo;
+				// cout << &sharedMem -> packet << endl;
+				// pack = (struct Packet *)shmat(shmid, (void *)0, 0);
+				// if (pack == (void *)-1)
+				// 	cout << "shmat失败" << endl;
 
-				roomCB = (struct RoomCB *)shmat(shm_RoomCBid, (void *)0, 0);
-				if (roomCB == (void *)-1)
-					cout << "roomCB shmat失败" << endl;
+				
+				// heartInfo = (struct HeartInfo *)shmat(shm_HeartInfoid, (void *)0, 0);
+				// if (heartInfo == (void *)-1)
+				// {
+				// 	perror("shmat");
+					// cout << "heartInfo shmat失败" << endl;
+				// }
+					
 				
 				// 发送UID设置报文
 				pack -> mode = 1;
+				cout << pack -> mode << endl;
 				pack -> userId = UID;
 				int zz = write(connectfd,pack,sizeof(Packet));
 				if (zz <= 0)
@@ -367,10 +351,21 @@ int main()
 							PrintPacket(false,pack);
 							break;
 						}
-						
+						else if(pack -> mode == 6)
+						{
+
+						}
+						else if(pack -> mode == 7 && pack -> userId == UID)
+						{
+							//重置心跳报文
+							heartInfo -> timer = 0;
+							cout << "收到心跳报文" << endl;
+							break;
+						}
 					}
 					id_tmp = pack -> id;
-					
+					// 模拟tcp ack机制
+					pack -> id ++;
 					if(pack -> mode == 0)
 					{
 
@@ -429,6 +424,11 @@ int main()
 								strcpy(pack -> content,"房间已锁");
 							}
 						}
+					}
+					else if(pack -> mode == 7)
+					{
+						pack -> mode = 8;
+						strcpy(pack -> content,"收到心跳报文");
 					}
 					int zz = write(connectfd,pack,sizeof(Packet));
 					if (zz <= 0)

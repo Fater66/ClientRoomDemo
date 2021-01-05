@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System;
+using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -26,7 +27,9 @@ public class ClientHandler : MonoBehaviour
     Thread thread;
     Thread recvThread;
     NetworkStream ns;
-    
+
+    double heartTimeStamp;
+    bool isCheckHeart;
 
     public void SetUpClient(string IP)
     {
@@ -66,6 +69,35 @@ public class ClientHandler : MonoBehaviour
         SendPacket(3, changeRoomId, nameInput.text, "");
     }
 
+    private void HeartBitSend(object state)
+    {
+        SendPacket(7, curRoomId, nameInput.text, "");
+    }
+
+    private void HeartBit(object state)
+    {
+        
+        TimeSpan ts = DateTime.Now - new DateTime(1970, 1, 1, 0, 0, 0, 0);
+        if (heartTimeStamp == 0) heartTimeStamp = ts.TotalSeconds;
+
+        double interval = ts.TotalSeconds - heartTimeStamp;
+        Debug.Log("ts.TotalSeconds - heartTimeStamp:" + interval);
+        if (interval > 10)
+        {
+            if (!isCheckHeart)
+            {
+                isCheckHeart = true;
+                heartTimeStamp = ts.TotalSeconds;
+                SendPacket(7, curRoomId, nameInput.text, "");
+                Debug.Log("发送心跳检测报文");
+            }
+            else
+            {
+                Debug.Log("心跳检测超时");
+            }
+        }
+    }
+
     public void SendMsgPacket()
     {
         SendPacket(0, curRoomId, nameInput.text, contentInput.text);
@@ -78,7 +110,7 @@ public class ClientHandler : MonoBehaviour
         Packet pack = new Packet(curUserId,curId,mode,roomId,packName, packContent);
         curId++;
 
-        Debug.Log("发送消息:" + ",房间号:" + curRoomId + ",昵称：" + packName + ",内容:"+pack.content);
+        Debug.Log("发送消息:" + "id:" + curId + "mode:" + mode + ",房间号:" + curRoomId + ",昵称：" + packName + ",内容:"+pack.content);
         byte[] message = MsgConverter.StructToBytes(pack);
 
         Debug.Log("message len:" + message.Length);
@@ -128,9 +160,11 @@ public class ClientHandler : MonoBehaviour
 
     private void Start()
     {
-        curUserId = (int)Random.Range(1f, 10000f);
-        Debug.Log("UserId初始化为"+ curUserId);
+        //curUserId = (int)Random.Range(1f, 10000f);
+        //Debug.Log("UserId初始化为"+ curUserId);
         ConnectToServer();
+        //Timer m_HeartBitTimer = new Timer(HeartBit, 0, 0, 2000);
+        Timer heartBitSender = new Timer(HeartBitSend, 0, 0, 3000);
         ReceiveMsg();
     }
 
@@ -143,13 +177,15 @@ public class ClientHandler : MonoBehaviour
         }
         //curUserId = int.Parse(userIdInput.text);
         debugText.text = "curRoomId:" + curRoomId + "\nuserId:" + curUserId;
+        //Debug.Log("socket" + socket.Connected);
     }
 
     private void OnApplicationQuit()
     {
         ns.Close();
-    }
 
+    }
+    
 }
 
 
