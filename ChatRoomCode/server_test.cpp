@@ -13,6 +13,7 @@
 
 #define BUFMAX 100
 #define FILENAME "share.txt"
+#define MAX_USER 100
 
 using namespace std;
 
@@ -44,12 +45,19 @@ struct HeartInfo
 	int connectfd;
 };
 
+struct UserInfo
+{
+	int roomInfo[MAX_USER];
+	char name[MAX_USER][16];	
+};
+
 // 打开句柄上限3个 所以合在一起 同时方便操作
 struct SharedMem
 {
 	struct Packet packet;
 	struct RoomCB roomCB;
 	struct HeartInfo heartInfo;
+	struct UserInfo userInfo;
 };
 
 static void sleep_ms(unsigned int secs)
@@ -63,7 +71,8 @@ static void sleep_ms(unsigned int secs)
 void* heart_handler(void* arg)
 {
     cout << "心跳检测线程启动" << endl;
-	HeartInfo* heartInfo = (struct HeartInfo*) arg;
+	struct SharedMem *sharedMem = (struct SharedMem*) arg;
+	struct HeartInfo *heartInfo = &sharedMem -> heartInfo;
     while(1)
     {
         if(heartInfo -> timer >= 0 && heartInfo -> timer < 3)
@@ -260,13 +269,12 @@ int main()
 				if (sharedMem == (void *)-1)
 					cout << "shm shmat失败" << endl;
 				struct Packet *pack= &sharedMem -> packet;
-
 				struct HeartInfo *heartInfo = &sharedMem -> heartInfo;
 				heartInfo -> pid = pid;
 				heartInfo -> timer = 0;
 				heartInfo -> connectfd = connectfd;
 				pthread_t heartId;     // 创建心跳检测线程
-				int ret = pthread_create(&heartId, NULL, heart_handler, heartInfo);
+				int ret = pthread_create(&heartId, NULL, heart_handler, sharedMem);
 				if(ret != 0)
 				{
 					cout << "无法创建心跳检测线程" << endl;
@@ -296,6 +304,7 @@ int main()
 				struct Packet *pack= &sharedMem -> packet;
 				struct RoomCB *roomCB = &sharedMem -> roomCB;
 				struct HeartInfo *heartInfo = &sharedMem -> heartInfo;
+				struct UserInfo *userInfo = &sharedMem -> userInfo;
 				// cout << &sharedMem -> packet << endl;
 				// pack = (struct Packet *)shmat(shmid, (void *)0, 0);
 				// if (pack == (void *)-1)
@@ -362,10 +371,15 @@ int main()
 							cout << "收到心跳报文" << endl;
 							break;
 						}
+						else if(pack -> mode == 9 && pack -> userId == UID)
+						{
+							PrintPacket(false,pack);
+							break;
+						}
 					}
 					id_tmp = pack -> id;
-					// 模拟tcp ack机制
-					pack -> id ++;
+					// 【废弃】模拟tcp ack机制
+					// pack -> id ++;
 					if(pack -> mode == 0)
 					{
 
@@ -386,6 +400,7 @@ int main()
 							roomCB -> UserCount [roomId_cur] --;
 						}
 						roomId_cur = -1;
+						userInfo -> roomInfo[pack -> userId] = -1;
 						pack -> mode = 5;
 						strcpy(pack -> content,"退出房间");
 					}
@@ -397,6 +412,7 @@ int main()
 							roomCB -> roomOwner[pack -> roomId] = pack -> userId;
 							roomCB -> isOpen[pack -> roomId] = true;
 							roomId_cur = pack -> roomId;
+							userInfo -> roomInfo[pack -> userId] = pack -> roomId;
 							strcpy(pack -> content,"房间创建成功");
 						}
 						else
@@ -415,6 +431,7 @@ int main()
 							if(roomCB -> isOpen[pack -> roomId])
 							{
 								roomId_cur = pack -> roomId;
+								userInfo -> roomInfo[pack -> userId] = roomId_cur;
 								// cout << "更改后的roomId_tmp" << roomId_cur << endl;
 								// cout << "UID" << UID << endl;
 								strcpy(pack -> content,"进入房间");
@@ -430,6 +447,14 @@ int main()
 						pack -> mode = 8;
 						strcpy(pack -> content,"收到心跳报文");
 					}
+					else if(pack -> mode == 9)
+					{
+						int pre_userId = stoi(pack -> content);
+						pack -> roomId = userInfo -> roomInfo[pre_userId];
+						strcpy(pack ->name, userInfo -> name[pre_userId]);
+						strcpy(pack -> content,"重连成功");
+					}
+					
 					int zz = write(connectfd,pack,sizeof(Packet));
 					if (zz <= 0)
 						cout << "************write 失败 ***" << endl;
