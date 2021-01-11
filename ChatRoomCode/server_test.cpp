@@ -60,7 +60,8 @@ struct SharedMem
 	struct RoomCB roomCB;
 	// struct HeartInfo heartInfo;
 	struct UserInfo userInfo;
-	// 记录连接的客户端<fd,pid,UID, count>
+	// 记录连接的客户端<fd,写pid,UID, count,读pid>
+	// 记录连接的客户端<UID,写pid,读pid, count>
 	int heartMap[MAX_USER_SAME_TIME][4];
 };
 
@@ -84,64 +85,37 @@ void* heart_handler(void* arg)
 		{
 			if(sharedMem -> heartMap[i][0] == 0)
 			{
-				// 当前connectfd = 0，没有连接
+				// 当前UID = 0，没有连接
 				continue;
 			}
 			if(sharedMem -> heartMap[i][3] >= 0 && sharedMem -> heartMap[i][3] < 3)
 			{
 				sharedMem -> heartMap[i][3] ++;
-				// cout << "当前connectfd" << sharedMem -> heartMap[i][0] << ",UID" << sharedMem -> heartMap[i][2] << ",timer:" << sharedMem -> heartMap[i][3] << endl;
+				// cout << "当前UID" << sharedMem -> heartMap[i][0] << ",UID" << sharedMem -> heartMap[i][2] << ",timer:" << sharedMem -> heartMap[i][3] << endl;
 			}
 			else if(sharedMem -> heartMap[i][3] == 3)
 			{
-				close(sharedMem -> heartMap[i][0]);
+				// close(sharedMem -> heartMap[i][0]);
 				kill(sharedMem -> heartMap[i][1],SIGUSR1);
-				cout << "kill 进程:" << sharedMem -> heartMap[i][1] << endl;
+				kill(sharedMem -> heartMap[i][2],SIGUSR2);
+				// cout << "kill 进程:" << sharedMem -> heartMap[i][1] << endl;
 				for(int j = 0;j < sizeof(roomCB -> roomOwner)/sizeof(roomCB -> roomOwner[1]);j++)
 				{
-					if(roomCB -> roomOwner[j] == sharedMem -> heartMap[i][2])
+					if(roomCB -> roomOwner[j] == sharedMem -> heartMap[i][0])
 					{
 						roomCB -> roomOwner[j] = 0;
 						roomCB -> isOpen[j] = false;
 						cout << "房间" << j << "重置" << endl;
 					}
 				}
+				cout << "心跳检测超时，当前i:" << i <<",UID" << sharedMem -> heartMap[i][0] << ".timer:" << sharedMem -> heartMap[i][3] << endl;
+				//重置heartMap
 				sharedMem -> heartMap[i][0] = 0;
-				cout << "心跳检测超时，当前UID" << sharedMem -> heartMap[i][2] << ".timer:" << sharedMem -> heartMap[i][3] << endl;
+				sharedMem -> heartMap[i][1] = 0;
+				sharedMem -> heartMap[i][2] = 0;
+				sharedMem -> heartMap[i][3] = 0;
 			}
 		}
-		// vector<vector<int > >::iterator it = sharedMem -> heartMap.begin();
-		// // cout << "初始遍历connectfd" << (*it)[0] << endl;
-		// for(;it!=sharedMem -> heartMap.end();)
-		// {
-		// 	cout << "当前遍历connectfd" << (*it)[0] << endl;
-		// 	if((*it)[3] >= 0 && (*it)[3] < 3)
-		// 	{
-		// 		(*it)[3] ++;
-		// 		cout << "当前connectfd" << (*it)[0] << ",UID" << (*it)[2] << ",timer:" << (*it)[3] << endl;
-		// 		++it;
-		// 	}
-		// 	else if((*it)[3] == 3)
-		// 	{
-		// 		close((*it)[0]);
-		// 		kill((*it)[1],SIGUSR1);
-		// 		for(int i = 0;i < sizeof(roomCB -> roomOwner)/sizeof(roomCB -> roomOwner[1]);i++)
-		// 		{
-		// 			if(roomCB -> roomOwner[i] == (*it)[2])
-		// 			{
-		// 				roomCB -> roomOwner[i] = 0;
-		// 				roomCB -> isOpen[i] = false;
-		// 				cout << "房间" << i << "重置" << endl;
-		// 			}
-		// 		}
-		// 		sharedMem -> heartMap.erase(it++);
-		// 		cout << "心跳检测超时，当前UID" << (*it)[2] << ".timer:" << (*it)[3] << endl;
-		// 	}
-		// 	else
-		// 	{
-		// 		++it;
-		// 	}
-		// }
 		sleep(3);   // 定时三秒
 
     }
@@ -170,8 +144,12 @@ void PrintPacket(bool isSend, Packet* pack)
 void func(int flag)
 {
 	cout << "write进程退出" << endl;
+	exit(0);
+}
+
+void func2(int flag)
+{
 	cout << "read进程退出" << endl;
-	cout << "func pid" << (int)getpid() << endl;
 	exit(0);
 }
 
@@ -204,8 +182,8 @@ ssize_t readn(int fd, void *content, size_t count)
 		if ((nread = read(fd, bufp, nleft)) <= 0)
 		{
 			cout << "socket连接中断" << endl;
-			exit(0);
-			// return 0;
+			// exit(0);
+			return 0;
 		}
 		nleft -= nread;
 		// printf("bufp:%c\n",*bufp);
@@ -292,6 +270,7 @@ int main()
 			// 第二次fork，创建读写进程
 			if (pid > 0)
 			{
+				signal(SIGUSR2, func2);
 				sharedMem = (struct SharedMem *)shmat(shmid, (void *)0, 0);
 				if (sharedMem == (void *)-1)
 					cout << "shm shmat失败" << endl;
@@ -305,18 +284,24 @@ int main()
 					cout << "连接已满，需要排队"<<endl;
 					return 0;
 				}
-				sharedMem -> heartMap[avaLoc][0] = connectfd;
+				cout << "avaLoc = "<< avaLoc << endl;
+				sharedMem -> heartMap[avaLoc][0] = UID;
 				sharedMem -> heartMap[avaLoc][1] = pid;
-				sharedMem -> heartMap[avaLoc][2] = UID;
+				sharedMem -> heartMap[avaLoc][2] = (int)getpid();
 				// sharedMem -> heartMap.insert(make_pair(connectfd,userinfo));
-				cout << " heartMap avaloc:" << avaLoc << ",connectfd" << connectfd << ",pid" << pid << ",UID" << UID <<endl;
+				// cout << " heartMap avaloc:" << avaLoc << ",connectfd" << connectfd << ",pid" << pid << ",UID" << UID <<endl;
 				struct Packet *pack= &sharedMem -> packet;
 				
-				cout << "此连接connectfd" << connectfd << ",读进程pid" << (int)getpid() << "UID:" << UID <<endl;
+				// cout << "此连接connectfd" << connectfd << ",读进程pid" << (int)getpid() << "UID:" << UID <<endl;
 				while (1)
 				{
 					// 注意此处要用Packet大小，sizeof(pack)是指针大小=8字节
 					num = readn(connectfd, pack, sizeof(Packet)); 
+					if(num == 0)
+					{
+						cout << "当前socket已关闭,read进程退出" << endl;
+						exit(0);
+					}
 				}
 			}
 			if (pid == 0) //子进程，负责发送数据
@@ -325,7 +310,7 @@ int main()
 				int id_tmp = -1;
 				int roomId_cur = -1;
 
-				cout << "此连接connectfd" << connectfd << ",写进程pid" << (int)getpid() << "UID:" << UID <<endl;
+				// cout << "此连接connectfd" << connectfd << ",写进程pid" << (int)getpid() << "UID:" << UID <<endl;
 				sharedMem = (struct SharedMem *)shmat(shmid, (void *)0, 0);
 				if (sharedMem == (void *)-1)
 					cout << "shm shmat失败" << endl;
@@ -336,18 +321,18 @@ int main()
 				
 				// 发送UID设置报文
 				pack -> mode = 1;
-				cout << pack -> mode << endl;
 				pack -> userId = UID;
 				int zz = write(connectfd,pack,sizeof(Packet));
 				if (zz <= 0)
 					cout << "************write 失败 ***" << endl;
-					
+				cout << "发送UID设置报文,当前UID:" << UID << endl;
 				while (1)
 				{
 					while (1)
 					{
 						sleep_ms(200); // 200ms
 						// 根据id判断是否是已发送报文
+						// PrintPacket(false,pack);
 						if(pack->id == id_tmp)
 							continue;
 						// 消息报文 
@@ -380,9 +365,8 @@ int main()
 
 						}
 						else if(pack -> mode == 7 && pack -> userId == UID)
+						// else if(pack -> mode == 7)
 						{
-							//重置心跳报文
-							// heartInfo -> timer = 0;
 							cout << "收到心跳报文" << endl;
 							break;
 						}
@@ -392,7 +376,6 @@ int main()
 							break;
 						}
 					}
-					id_tmp = pack -> id;
 					if(pack -> mode == 0)
 					{
 
@@ -457,20 +440,29 @@ int main()
 					}
 					else if(pack -> mode == 7)
 					{
-						int mapLoc = find_single_connect(sharedMem -> heartMap,connectfd);
+						int mapLoc = find_single_connect(sharedMem -> heartMap,UID);
 						sharedMem -> heartMap[mapLoc][3] = 0; // 重置定时器
-						cout << "client" << connectfd << "UID" << sharedMem -> heartMap[mapLoc][2] << endl;
+						// cout << "client" << connectfd << "UID" << sharedMem -> heartMap[mapLoc][2] << endl;
 						pack -> mode = 8;
 						strcpy(pack -> content,"收到心跳报文");
+						cout << "发送心跳确认报文至" << sharedMem -> heartMap[mapLoc][0] << endl;
 					}
 					else if(pack -> mode == 9)
 					{
+						cout << "收到重连报文" << endl;
+						pack -> mode = 10;
 						int pre_userId = stoi(pack -> content);
 						pack -> roomId = userInfo -> roomInfo[pre_userId];
 						strcpy(pack ->name, userInfo -> name[pre_userId]);
-						strcpy(pack -> content,"重连成功");
+						// strcpy(pack -> content,"重连成功");
 					}
-					
+					// cout << "拷贝前pack id" << pack -> id << endl;
+					// struct Packet sendPacket= *pack;
+					// sendPacket.id ++;
+					// cout << "拷贝后pack id" << pack -> id << endl;
+					// cout << "靠背后sendPack id" << sendPacket.id << endl;
+					pack -> id ++;
+					id_tmp = pack -> id;
 					int zz = write(connectfd,pack,sizeof(Packet));
 					if (zz <= 0)
 						cout << "************write 失败 ***" << endl;
