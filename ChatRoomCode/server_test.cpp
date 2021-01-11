@@ -463,6 +463,7 @@ int main()
 					// cout << "靠背后sendPack id" << sendPacket.id << endl;
 					pack -> id ++;
 					id_tmp = pack -> id;
+					strcpy(userInfo -> name[pack -> userId],pack -> name);
 					int zz = write(connectfd,pack,sizeof(Packet));
 					if (zz <= 0)
 						cout << "************write 失败 ***" << endl;
