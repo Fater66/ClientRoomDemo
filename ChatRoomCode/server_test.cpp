@@ -22,7 +22,10 @@ struct Packet
 {
 	int userId;
 	int id;
-	// 0: 消息 1:设置userid 2:退出房间 3.开房间  4.进入房间 5.确认退出房间 6.锁房间 7.心跳报文 8.确认心跳
+	// 0: 消息 1:设置userid 2:退出房间 3.开房间
+	// 4.进入房间 5.确认退出房间 6.待定 7.心跳报文
+	// 8.确认心跳 9.重连报文 10.确认重连 11.锁房间
+	// 12.确认锁
 	int mode;
 	int len;
 
@@ -364,12 +367,16 @@ int main()
 						{
 						}
 						else if (pack->mode == 7 && pack->userId == UID)
-						// else if(pack -> mode == 7)
 						{
 							cout << "收到心跳报文" << endl;
 							break;
 						}
 						else if (pack->mode == 9 && pack->userId == UID)
+						{
+							PrintPacket(false, pack);
+							break;
+						}
+						else if (pack->mode == 11 && pack->userId == UID)
 						{
 							PrintPacket(false, pack);
 							break;
@@ -462,11 +469,20 @@ int main()
 						strcpy(pack->name, userInfo->name[pre_userId]);
 						// strcpy(pack -> content,"重连成功");
 					}
-					// cout << "拷贝前pack id" << pack -> id << endl;
-					// struct Packet sendPacket= *pack;
-					// sendPacket.id ++;
-					// cout << "拷贝后pack id" << pack -> id << endl;
-					// cout << "靠背后sendPack id" << sendPacket.id << endl;
+					else if (pack->mode == 11)
+					{
+						pack->mode = 12;
+						// 先判断是否当前用户是房主
+						if(roomCB->roomOwner[pack->roomId] == pack->userId)
+						{
+							roomCB->isOpen[pack->roomId] =  !roomCB->isOpen[pack->roomId];
+							strcpy(pack->content,roomCB->isOpen[pack->roomId]?"true":"false");
+						}
+						else
+						{
+							strcpy(pack->content,"你不是房主,不能更改房间状态");
+						}
+					}
 					pack->id++;
 					id_tmp = pack->id;
 					strcpy(userInfo->name[pack->userId], pack->name);
