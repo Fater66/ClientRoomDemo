@@ -27,7 +27,7 @@ struct Packet
 	int len;
 
 	int roomId;
-	char name[16]; 
+	char name[16];
 	char content[BUFMAX];
 };
 
@@ -50,7 +50,7 @@ struct HeartInfo
 struct UserInfo
 {
 	int roomInfo[MAX_USER];
-	char name[MAX_USER][16];	
+	char name[MAX_USER][16];
 };
 
 // 打开句柄上限3个 所以合在一起 同时方便操作
@@ -67,64 +67,62 @@ struct SharedMem
 
 static void sleep_ms(unsigned int secs)
 {
-    struct timeval tval;
-    tval.tv_sec=secs/1000;
-    tval.tv_usec=(secs*1000)%1000000;
-    select(0,NULL,NULL,NULL,&tval);
+	struct timeval tval;
+	tval.tv_sec = secs / 1000;
+	tval.tv_usec = (secs * 1000) % 1000000;
+	select(0, NULL, NULL, NULL, &tval);
 }
 
-void* heart_handler(void* arg)
+void *heart_handler(void *arg)
 {
-    // cout << "心跳检测进程启动id" << (int)getpid() << endl;
-	struct SharedMem *sharedMem = (struct SharedMem*) arg;
-	struct RoomCB *roomCB = &sharedMem -> roomCB;
-    while(1)
-    {
+	// cout << "心跳检测进程启动id" << (int)getpid() << endl;
+	struct SharedMem *sharedMem = (struct SharedMem *)arg;
+	struct RoomCB *roomCB = &sharedMem->roomCB;
+	while (1)
+	{
 		// cout << "heartMap size:" << sharedMem -> heartMap.size() << endl;
-		for(int i = 0;i < MAX_USER_SAME_TIME ;i++)
+		for (int i = 0; i < MAX_USER_SAME_TIME; i++)
 		{
-			if(sharedMem -> heartMap[i][0] == 0)
+			if (sharedMem->heartMap[i][0] == 0)
 			{
 				// 当前UID = 0，没有连接
 				continue;
 			}
-			if(sharedMem -> heartMap[i][3] >= 0 && sharedMem -> heartMap[i][3] < 3)
+			if (sharedMem->heartMap[i][3] >= 0 && sharedMem->heartMap[i][3] < 3)
 			{
-				sharedMem -> heartMap[i][3] ++;
+				sharedMem->heartMap[i][3]++;
 				// cout << "当前UID" << sharedMem -> heartMap[i][0] << ",UID" << sharedMem -> heartMap[i][2] << ",timer:" << sharedMem -> heartMap[i][3] << endl;
 			}
-			else if(sharedMem -> heartMap[i][3] == 3)
+			else if (sharedMem->heartMap[i][3] == 3)
 			{
 				// close(sharedMem -> heartMap[i][0]);
-				kill(sharedMem -> heartMap[i][1],SIGUSR1);
-				kill(sharedMem -> heartMap[i][2],SIGUSR2);
+				kill(sharedMem->heartMap[i][1], SIGUSR1);
+				kill(sharedMem->heartMap[i][2], SIGUSR2);
 				// cout << "kill 进程:" << sharedMem -> heartMap[i][1] << endl;
-				for(int j = 0;j < sizeof(roomCB -> roomOwner)/sizeof(roomCB -> roomOwner[1]);j++)
+				for (int j = 0; j < sizeof(roomCB->roomOwner) / sizeof(roomCB->roomOwner[1]); j++)
 				{
-					if(roomCB -> roomOwner[j] == sharedMem -> heartMap[i][0])
+					if (roomCB->roomOwner[j] == sharedMem->heartMap[i][0])
 					{
-						roomCB -> roomOwner[j] = 0;
-						roomCB -> isOpen[j] = false;
+						roomCB->roomOwner[j] = 0;
+						roomCB->isOpen[j] = false;
 						cout << "房间" << j << "重置" << endl;
 					}
 				}
-				cout << "心跳检测超时，当前i:" << i <<",UID" << sharedMem -> heartMap[i][0] << ".timer:" << sharedMem -> heartMap[i][3] << endl;
+				cout << "心跳检测超时，当前i:" << i << ",UID" << sharedMem->heartMap[i][0] << ".timer:" << sharedMem->heartMap[i][3] << endl;
 				//重置heartMap
-				sharedMem -> heartMap[i][0] = 0;
-				sharedMem -> heartMap[i][1] = 0;
-				sharedMem -> heartMap[i][2] = 0;
-				sharedMem -> heartMap[i][3] = 0;
+				sharedMem->heartMap[i][0] = 0;
+				sharedMem->heartMap[i][1] = 0;
+				sharedMem->heartMap[i][2] = 0;
+				sharedMem->heartMap[i][3] = 0;
 			}
 		}
-		sleep(3);   // 定时三秒
-
-    }
+		sleep(3); // 定时三秒
+	}
 }
 
-
-void PrintPacket(bool isSend, Packet* pack)
+void PrintPacket(bool isSend, Packet *pack)
 {
-	if(isSend)
+	if (isSend)
 	{
 		cout << "发送";
 	}
@@ -135,7 +133,7 @@ void PrintPacket(bool isSend, Packet* pack)
 	cout << "||userId:" << pack->userId;
 	cout << "||id:" << pack->id;
 	cout << "||len:" << pack->len;
-	cout << "||mode:" << pack -> mode;
+	cout << "||mode:" << pack->mode;
 	cout << "||roomId:" << pack->roomId;
 	cout << "||name:" << pack->name;
 	cout << "||content:" << pack->content;
@@ -192,11 +190,11 @@ ssize_t readn(int fd, void *content, size_t count)
 	return count;
 }
 
-int find_single_connect(int heartMap[MAX_USER_SAME_TIME][4],int target)
+int find_single_connect(int heartMap[MAX_USER_SAME_TIME][4], int target)
 {
-	for(int i = 0;i< MAX_USER_SAME_TIME;i++)
+	for (int i = 0; i < MAX_USER_SAME_TIME; i++)
 	{
-		if(heartMap[i][0] == target)
+		if (heartMap[i][0] == target)
 			return i;
 	}
 	return -1;
@@ -246,10 +244,10 @@ int main()
 	if (listen(listenfd, 10) == -1)
 		cout << "listen 错误" << endl;
 
-	pthread_t heartId;     // 创建心跳检测线程
+	pthread_t heartId; // 创建心跳检测线程
 	int ret = pthread_create(&heartId, NULL, heart_handler, sharedMem);
 
-	if(ret != 0)
+	if (ret != 0)
 	{
 		cout << "无法创建心跳检测线程" << endl;
 	}
@@ -263,7 +261,7 @@ int main()
 			cout << "连接成功" << endl;
 		// 第一次fork，保证不断监听
 		pid = fork();
-		if(pid == 0)
+		if (pid == 0)
 		{
 			close(listenfd);
 			pid = fork();
@@ -278,28 +276,30 @@ int main()
 				// userinfo[0] = connectfd;
 				// userinfo[1] = pid;
 				// userinfo[2] = UID;
-				int avaLoc = find_single_connect(sharedMem -> heartMap,0);
-				if(avaLoc == -1)
+				int avaLoc = find_single_connect(sharedMem->heartMap, 0);
+				if (avaLoc == -1)
 				{
-					cout << "连接已满，需要排队"<<endl;
+					cout << "连接已满，需要排队" << endl;
 					return 0;
 				}
-				cout << "avaLoc = "<< avaLoc << endl;
-				sharedMem -> heartMap[avaLoc][0] = UID;
-				sharedMem -> heartMap[avaLoc][1] = pid;
-				sharedMem -> heartMap[avaLoc][2] = (int)getpid();
+				cout << "avaLoc = " << avaLoc << endl;
+				sharedMem->heartMap[avaLoc][0] = UID;
+				sharedMem->heartMap[avaLoc][1] = pid;
+				sharedMem->heartMap[avaLoc][2] = (int)getpid();
 				// sharedMem -> heartMap.insert(make_pair(connectfd,userinfo));
 				// cout << " heartMap avaloc:" << avaLoc << ",connectfd" << connectfd << ",pid" << pid << ",UID" << UID <<endl;
-				struct Packet *pack= &sharedMem -> packet;
-				
+				struct Packet *pack = &sharedMem->packet;
+
 				// cout << "此连接connectfd" << connectfd << ",读进程pid" << (int)getpid() << "UID:" << UID <<endl;
 				while (1)
 				{
 					// 注意此处要用Packet大小，sizeof(pack)是指针大小=8字节
-					num = readn(connectfd, pack, sizeof(Packet)); 
-					if(num == 0)
+					num = readn(connectfd, pack, sizeof(Packet));
+					if (num == 0)
 					{
 						cout << "当前socket已关闭,read进程退出" << endl;
+						//关闭write进程
+						kill(pid, SIGUSR1);
 						exit(0);
 					}
 				}
@@ -314,15 +314,15 @@ int main()
 				sharedMem = (struct SharedMem *)shmat(shmid, (void *)0, 0);
 				if (sharedMem == (void *)-1)
 					cout << "shm shmat失败" << endl;
-				struct Packet *pack= &sharedMem -> packet;
-				struct RoomCB *roomCB = &sharedMem -> roomCB;
+				struct Packet *pack = &sharedMem->packet;
+				struct RoomCB *roomCB = &sharedMem->roomCB;
 				// struct HeartInfo *heartInfo = &sharedMem -> heartInfo;
-				struct UserInfo *userInfo = &sharedMem -> userInfo;
-				
+				struct UserInfo *userInfo = &sharedMem->userInfo;
+
 				// 发送UID设置报文
-				pack -> mode = 1;
-				pack -> userId = UID;
-				int zz = write(connectfd,pack,sizeof(Packet));
+				pack->mode = 1;
+				pack->userId = UID;
+				int zz = write(connectfd, pack, sizeof(Packet));
 				if (zz <= 0)
 					cout << "************write 失败 ***" << endl;
 				cout << "发送UID设置报文,当前UID:" << UID << endl;
@@ -333,127 +333,133 @@ int main()
 						sleep_ms(200); // 200ms
 						// 根据id判断是否是已发送报文
 						// PrintPacket(false,pack);
-						if(pack->id == id_tmp)
+						if (pack->id == id_tmp)
 							continue;
-						// 消息报文 
+						// 消息报文
 						// 1.判断是否是当前房间的报文
-						if (pack -> mode == 0 && pack -> roomId == roomId_cur  && roomId_cur != -1)
+						if (pack->mode == 0 && pack->roomId == roomId_cur && roomId_cur != -1)
 						{
 							// 收到当前报文，break进入转发流程
 							cout << "收到消息报文" << endl;
 							break;
 						}
-						// 退出房间报文 
+						// 退出房间报文
 						// 1.判断是否是当前socket的用户发出
-						else if(pack -> mode == 2 && pack -> userId == UID)
+						else if (pack->mode == 2 && pack->userId == UID)
 						{
-							PrintPacket(false,pack);
+							PrintPacket(false, pack);
 							break;
 						}
-						else if(pack -> mode == 3  && pack -> userId == UID)
+						else if (pack->mode == 3 && pack->userId == UID)
 						{
-							PrintPacket(false,pack);
+							PrintPacket(false, pack);
 							break;
 						}
-						else if(pack -> mode == 4 && pack -> roomId != roomId_cur && pack -> userId == UID)
+						else if (pack->mode == 4 && pack->roomId != roomId_cur && pack->userId == UID)
 						{
-							PrintPacket(false,pack);
+							PrintPacket(false, pack);
 							break;
 						}
-						else if(pack -> mode == 6)
+						else if (pack->mode == 6)
 						{
-
 						}
-						else if(pack -> mode == 7 && pack -> userId == UID)
+						else if (pack->mode == 7 && pack->userId == UID)
 						// else if(pack -> mode == 7)
 						{
 							cout << "收到心跳报文" << endl;
 							break;
 						}
-						else if(pack -> mode == 9 && pack -> userId == UID)
+						else if (pack->mode == 9 && pack->userId == UID)
 						{
-							PrintPacket(false,pack);
+							PrintPacket(false, pack);
 							break;
 						}
 					}
-					if(pack -> mode == 0)
+					if (pack->mode == 0)
 					{
-
 					}
 					// 2:退出房间
-					else if(pack -> mode == 2)
+					else if (pack->mode == 2)
 					{
 						// 首先判断当前房间是否是房主，如果是 关闭房间
-						if(roomCB -> roomOwner[roomId_cur] == pack -> userId)
+						if (roomCB->roomOwner[roomId_cur] == pack->userId)
 						{
-							roomCB -> roomOwner[roomId_cur] = 0;
-							roomCB -> isOpen[roomId_cur] = false;
-							roomCB -> UserCount[roomId_cur] = 0;
-							
+							roomCB->roomOwner[roomId_cur] = 0;
+							roomCB->isOpen[roomId_cur] = false;
+							roomCB->UserCount[roomId_cur] = 0;
 						}
 						else
 						{
-							roomCB -> UserCount [roomId_cur] --;
+							roomCB->UserCount[roomId_cur]--;
 						}
 						roomId_cur = -1;
-						userInfo -> roomInfo[pack -> userId] = -1;
-						pack -> mode = 5;
-						strcpy(pack -> content,"退出房间");
+						userInfo->roomInfo[pack->userId] = -1;
+						pack->mode = 5;
+						strcpy(pack->content, "退出房间");
 					}
-					else if(pack -> mode == 3)
+					else if (pack->mode == 3)
 					{
 						// 判断是否有人开了房间
-						if(roomCB -> roomOwner[pack -> roomId] == 0)
+						if (roomCB->roomOwner[pack->roomId] == 0)
 						{
-							roomCB -> roomOwner[pack -> roomId] = pack -> userId;
-							roomCB -> isOpen[pack -> roomId] = true;
-							roomId_cur = pack -> roomId;
-							userInfo -> roomInfo[pack -> userId] = pack -> roomId;
-							strcpy(pack -> content,"房间创建成功");
+							roomCB->roomOwner[pack->roomId] = pack->userId;
+							roomCB->isOpen[pack->roomId] = true;
+							roomId_cur = pack->roomId;
+							userInfo->roomInfo[pack->userId] = pack->roomId;
+							strcpy(pack->content, "房间创建成功");
 						}
 						else
 						{
-							strcpy(pack -> content,"房间已被占用");
+							strcpy(pack->content, "房间已被占用");
 						}
 					}
-					else if(pack -> mode == 4)
+					else if (pack->mode == 4)
 					{
-						if(roomCB -> roomOwner[pack -> roomId] == 0)
+						if (roomCB->roomOwner[pack->roomId] == 0)
 						{
-							strcpy(pack -> content,"房间不存在");
+							strcpy(pack->content, "房间不存在");
 						}
 						else
 						{
-							if(roomCB -> isOpen[pack -> roomId])
+							if (roomCB->isOpen[pack->roomId])
 							{
-								roomId_cur = pack -> roomId;
-								userInfo -> roomInfo[pack -> userId] = roomId_cur;
+								roomId_cur = pack->roomId;
+								userInfo->roomInfo[pack->userId] = roomId_cur;
 								// cout << "更改后的roomId_tmp" << roomId_cur << endl;
 								// cout << "UID" << UID << endl;
-								strcpy(pack -> content,"进入房间");
+								strcpy(pack->content, "进入房间");
 							}
 							else
 							{
-								strcpy(pack -> content,"房间已锁");
+								strcpy(pack->content, "房间已锁");
 							}
 						}
 					}
-					else if(pack -> mode == 7)
+					else if (pack->mode == 7)
 					{
-						int mapLoc = find_single_connect(sharedMem -> heartMap,UID);
-						sharedMem -> heartMap[mapLoc][3] = 0; // 重置定时器
+						int mapLoc = find_single_connect(sharedMem->heartMap, UID);
+						sharedMem->heartMap[mapLoc][3] = 0; // 重置定时器
 						// cout << "client" << connectfd << "UID" << sharedMem -> heartMap[mapLoc][2] << endl;
-						pack -> mode = 8;
-						strcpy(pack -> content,"收到心跳报文");
-						cout << "发送心跳确认报文至" << sharedMem -> heartMap[mapLoc][0] << endl;
+						pack->mode = 8;
+						strcpy(pack->content, "收到心跳报文");
+						cout << "发送心跳确认报文至" << sharedMem->heartMap[mapLoc][0] << endl;
 					}
-					else if(pack -> mode == 9)
+					else if (pack->mode == 9)
 					{
 						cout << "收到重连报文" << endl;
-						pack -> mode = 10;
-						int pre_userId = stoi(pack -> content);
-						pack -> roomId = userInfo -> roomInfo[pre_userId];
-						strcpy(pack ->name, userInfo -> name[pre_userId]);
+						pack->mode = 10;
+						int pre_userId = stoi(pack->content);
+						// 如果原有房间已被关闭
+						if (roomCB->isOpen[userInfo->roomInfo[pre_userId]] == false)
+						{
+							pack->roomId = -1;
+						}
+						else
+						{
+							pack->roomId = userInfo->roomInfo[pre_userId];
+						}
+
+						strcpy(pack->name, userInfo->name[pre_userId]);
 						// strcpy(pack -> content,"重连成功");
 					}
 					// cout << "拷贝前pack id" << pack -> id << endl;
@@ -461,10 +467,10 @@ int main()
 					// sendPacket.id ++;
 					// cout << "拷贝后pack id" << pack -> id << endl;
 					// cout << "靠背后sendPack id" << sendPacket.id << endl;
-					pack -> id ++;
-					id_tmp = pack -> id;
-					strcpy(userInfo -> name[pack -> userId],pack -> name);
-					int zz = write(connectfd,pack,sizeof(Packet));
+					pack->id++;
+					id_tmp = pack->id;
+					strcpy(userInfo->name[pack->userId], pack->name);
+					int zz = write(connectfd, pack, sizeof(Packet));
 					if (zz <= 0)
 						cout << "************write 失败 ***" << endl;
 				}
